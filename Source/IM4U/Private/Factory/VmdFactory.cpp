@@ -1240,7 +1240,7 @@ bool UVmdFactory::ImportVMDToAnimSequence(
 		}
 	}
 
-#if 1
+#if 0
 	////////////////////////////////////
 	//親ボーンの順番::TBD(IK用)
 	TArray<int> TempBoneTreeRefSkel;
@@ -1282,7 +1282,7 @@ bool UVmdFactory::ImportVMDToAnimSequence(
 
 		for (int32 BoneIndex = 0; BoneIndex < NumBones; ++BoneIndex)
 		{
-#if 1 /* :UE414: 4.14からのエンジン仕様変更 */
+#if 0 /* :UE414: 4.14からのエンジン仕様変更 */
 			FRawAnimSequenceTrack &RawTrack = ImportRawTrackList[BoneIndex];
 						
 #else	/* ~UE4.13 */
@@ -1297,8 +1297,9 @@ bool UVmdFactory::ImportVMDToAnimSequence(
 			{
 				//移動後の位置 = 元の位置 + 平行移動
 				//移動後の回転 = 回転
+				RawTrack.PosKeys.Add(LocalRawTrack.PosKeys[k]);
 				//RawTrack.PosKeys.Add(LocalRawTrack.PosKeys[k] + RefBonePose[BoneIndex].GetTranslation());
-				RawTrack.PosKeys.Add(LocalRawTrack.PosKeys[k] + RefBonePose[BoneIndex].GetTranslation().);
+				//RawTrack.PosKeys.Add(LocalRawTrack.PosKeys[k] + RefBonePose[BoneIndex].GetTranslation().);
 				RawTrack.RotKeys.Add(LocalRawTrack.RotKeys[k]);
 				RawTrack.ScaleKeys.Add(LocalRawTrack.ScaleKeys[k]);
 			}

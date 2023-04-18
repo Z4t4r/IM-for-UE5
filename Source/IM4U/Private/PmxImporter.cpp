@@ -804,7 +804,9 @@ Buffer += memcopySize;
 				
 				rb.NameEng = PMXTexBufferToFString(&Buffer, pmxEncodeType);
 
-				rb.BoneIndex = MMDExtendBufferSizeToUint32(&Buffer, this->baseHeader.BoneIndexSize)+ offsetBoneIndex;
+				//UE_LOG print this->baseHeader.BoneIndexSize
+				rb.BoneIndex = MMDExtendBufferSizeToInt32(&Buffer, this->baseHeader.BoneIndexSize)+ offsetBoneIndex;
+				UE_LOG(LogMMD4UE4_PmxMeshInfo, Warning, TEXT("PMX Import [RigidBody] BoneIndexSize %d"), rb.BoneIndex);
 				
 				auto bone=boneList[rb.BoneIndex]; rb.fnName = FName(bone.Name);
 				readBuffer(rb.RigidBodyGroupIndex);

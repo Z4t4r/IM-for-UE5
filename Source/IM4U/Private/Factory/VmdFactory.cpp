@@ -12,20 +12,21 @@
 #include "AssetRegistryModule.h"
 
 #include "VmdImportUI.h"
+#include "RigEditor/IKRigController.h"
 
 
 #include "Factory/VmdImportOption.h"
+
 
 #define LOCTEXT_NAMESPACE "VMDImportFactory"
 
 
 DEFINE_LOG_CATEGORY(LogMMD4UE4_VMDFactory)
 
-static TMap<FName, FName> NameMap;
 #define ADD_NAME_MAP( x , y ) NameMap.Add((y),(x))
-void initMmdNameMap() {
 
-
+void initMmdNameMap()
+{
 #if 0
 	if (NameMap.Num() == 0)
 	{
@@ -99,25 +100,25 @@ void initMmdNameMap() {
 	}
 #endif
 }
+
 /////////////////////////////////////////////////////////
 //prototype ::from dxlib 
 // Ｘ軸を中心とした回転行列を作成する
-void CreateRotationXMatrix(FMatrix *Out, float Angle);
+void CreateRotationXMatrix(FMatrix* Out, float Angle);
 // 回転成分だけの行列の積を求める( ３×３以外の部分には値も代入しない )
-void MV1LoadModelToVMD_CreateMultiplyMatrixRotOnly(FMatrix *Out, FMatrix *In1, FMatrix *In2);
+void MV1LoadModelToVMD_CreateMultiplyMatrixRotOnly(FMatrix* Out, FMatrix* In1, FMatrix* In2);
 // 角度制限を判定する共通関数 (subIndexJdgの判定は割りと不明…)
 void CheckLimitAngle(
 	const FVector& RotMin,
 	const FVector& RotMax,
-	FVector * outAngle, //target angle ( in and out param)
+	FVector* outAngle, //target angle ( in and out param)
 	bool subIndexJdg //(ik link index < ik loop temp):: linkBoneIndex < ikt
-	);
+);
 ///////////////////////////////////////////////////////
 
 UVmdFactory::UVmdFactory(const FObjectInitializer& ObjectInitializer)
 	: Super(ObjectInitializer)
 {
-
 	SupportedClass = NULL;
 	//SupportedClass = UPmxFactory::StaticClass();
 	Formats.Empty();
@@ -129,7 +130,6 @@ UVmdFactory::UVmdFactory(const FObjectInitializer& ObjectInitializer)
 	bEditorImport = true;
 
 	initMmdNameMap();
-
 }
 
 void UVmdFactory::PostInitProperties()
@@ -151,16 +151,16 @@ UClass* UVmdFactory::ResolveSupportedClass()
 
 UObject* UVmdFactory::FactoryCreateBinary
 (
-	UClass*				Class,
-	UObject*			InParent,
-	FName				Name,
-	EObjectFlags		Flags,
-	UObject*			Context,
-	const TCHAR*		Type,
-	const uint8*&		Buffer,
-	const uint8*		BufferEnd,
-	FFeedbackContext*	Warn,
-	bool&				bOutOperationCanceled
+	UClass* Class,
+	UObject* InParent,
+	FName Name,
+	EObjectFlags Flags,
+	UObject* Context,
+	const TCHAR* Type,
+	const uint8*& Buffer,
+	const uint8* BufferEnd,
+	FFeedbackContext* Warn,
+	bool& bOutOperationCanceled
 )
 {
 	MMD4UE4::VmdMotionInfo vmdMotionInfo;
@@ -168,7 +168,7 @@ UObject* UVmdFactory::FactoryCreateBinary
 	if (vmdMotionInfo.VMDLoaderBinary(Buffer, BufferEnd) == false)
 	{
 		UE_LOG(LogMMD4UE4_VMDFactory, Error,
-			TEXT("VMD Import Cancel:: vmd data load faile."));
+		       TEXT("VMD Import Cancel:: vmd data load faile."));
 		return NULL;
 	}
 
@@ -176,6 +176,7 @@ UObject* UVmdFactory::FactoryCreateBinary
 	UAnimSequence* LastCreatedAnim = NULL;
 	USkeleton* Skeleton = NULL;
 	USkeletalMesh* SkeletalMesh = NULL;
+	UIKRigDefinition* IKRig = NULL;
 	VMDImportOptions* ImportOptions = NULL;
 	//////////////////////////////////////
 
@@ -185,10 +186,11 @@ UObject* UVmdFactory::FactoryCreateBinary
 	if (false)
 	{
 		//モデル読み込み後の警告文表示：コメント欄
-		FText TitleStr = FText::Format(LOCTEXT("ImportReadMe_Generic_Dbg", "{0} 制限事項"), FText::FromString("IM4U Plugin"));
+		FText TitleStr = FText::Format(
+			LOCTEXT("ImportReadMe_Generic_Dbg", "{0} 制限事項"), FText::FromString("IM4U Plugin"));
 		const FText MessageDbg
 			= FText(LOCTEXT("ImportReadMe_Generic_Dbg_Comment",
-"現時点で有効なパラメータは、以下です\n\n\
+			                "現時点で有効なパラメータは、以下です\n\n\
 ::Skeleton Asset(必須::Animation関連付け先)\n\
 ::SkeletalMesh Asset(任意::Animation関連付け先、MorphTarget. NULLならばMorphTargetはSkipします。)\n\
 ::Animation Asset(NULL以外で既存AssetにMorphのみ追加する処理を実行。NULLでBoneとMorph含む新規Asset作成)\n\
@@ -197,7 +199,7 @@ UObject* UVmdFactory::FactoryCreateBinary
 \n\
 \n\
 注意：新規Asset生成はIKなど未対応の為非推奨。追加Morphのみ対応。"
-			)
+				)
 			);
 		FMessageDialog::Open(EAppMsgType::Ok, MessageDbg, &TitleStr);
 	}
@@ -210,7 +212,7 @@ UObject* UVmdFactory::FactoryCreateBinary
 		FText TitleStr = FText(LOCTEXT("ImportVMD_TargetModelInfo", "警告[ImportVMD_TargetModelInfo]"));
 		const FText MessageDbg
 			= FText::Format(LOCTEXT("ImportVMD_TargetModelInfo_Comment",
-			"注意：モーションデータ取り込み情報：：\n\
+			                        "注意：モーションデータ取り込み情報：：\n\
 \n\
 本VMDは、「{0}」用に作成されたファイルです。\n\
 \n\
@@ -219,7 +221,7 @@ UObject* UVmdFactory::FactoryCreateBinary
 事前に変換テーブル(MMD2UE4NameTableRow)を作成し、\n\
 InportOption画面にて指定することで取り込むことが可能です。"
 			)
-			, FText::FromString(vmdMotionInfo.ModelName)
+			                , FText::FromString(vmdMotionInfo.ModelName)
 			);
 		FMessageDialog::Open(EAppMsgType::Ok, MessageDbg, &TitleStr);
 	}
@@ -236,38 +238,37 @@ InportOption画面にて指定することで取り込むことが可能です�
 		bool bIsPmxFormat = true;
 		// show Import Option Slate
 		bool bImportAll = false;
-		ImportUI->bIsObjImport = false;//anim mode
+		ImportUI->bIsObjImport = false; //anim mode
 		ImportUI->OriginalImportType = EVMDImportType::VMDIT_Animation;
 		ImportOptions
 			= GetVMDImportOptions(
 				VmdImporter,
 				ImportUI,
-				true,//bShowImportDialog, 
+				true, //bShowImportDialog, 
 				InParent->GetPathName(),
 				bOperationCanceled,
 				bImportAll,
-				ImportUI->bIsObjImport,//bIsPmxFormat,
+				ImportUI->bIsObjImport, //bIsPmxFormat,
 				bIsPmxFormat,
 				ForcedImportType
-				);
+			);
 		/* 一度目の判定 */
 		if (ImportOptions)
 		{
 			Skeleton = ImportUI->Skeleton;
 			SkeletalMesh = ImportUI->SkeletonMesh;
 			/* 最低限のパラメータ設定チェック */
-			if ( (!Skeleton) ||  (!SkeletalMesh) || (Skeleton != SkeletalMesh->GetSkeleton()))
+			if ((!Skeleton) || (!SkeletalMesh) || (Skeleton != SkeletalMesh->GetSkeleton()))
 			{
-
 				UE_LOG(LogMMD4UE4_VMDFactory, Warning,
-					TEXT("[ImportAnimations]::Parameter check for Import option!"));
+				       TEXT("[ImportAnimations]::Parameter check for Import option!"));
 
 				{
 					//モデル読み込み後の警告文表示：コメント欄
 					FText TitleStr = FText(LOCTEXT("ImportVMD_OptionWarn_CheckPh1", "警告[ImportVMD_TargetModelInfo]"));
 					const FText MessageDbg
 						= FText::Format(LOCTEXT("ImportVMD_OptionWarn_CheckPh1_Comment",
-							"注意：Parameter check for Import option ：：\n\
+						                        "注意：Parameter check for Import option ：：\n\
 \n\
 [Mandatory](必須)\n\
 - Skeleton Asset : you select target skeleton .\n\
@@ -279,7 +280,7 @@ InportOption画面にて指定することで取り込むことが可能です�
 \n\
 Retry ImportOption!"
 						)
-							, FText::FromString(vmdMotionInfo.ModelName)
+						                , FText::FromString(vmdMotionInfo.ModelName)
 						);
 					FMessageDialog::Open(EAppMsgType::Ok, MessageDbg, &TitleStr);
 				}
@@ -288,11 +289,11 @@ Retry ImportOption!"
 					= GetVMDImportOptions(
 						VmdImporter,
 						ImportUI,
-						true,//bShowImportDialog, 
+						true, //bShowImportDialog, 
 						InParent->GetPathName(),
 						bOperationCanceled,
 						bImportAll,
-						ImportUI->bIsObjImport,//bIsPmxFormat,
+						ImportUI->bIsObjImport, //bIsPmxFormat,
 						bIsPmxFormat,
 						ForcedImportType
 					);
@@ -302,7 +303,8 @@ Retry ImportOption!"
 		{
 			Skeleton = ImportUI->Skeleton;
 			SkeletalMesh = ImportUI->SkeletonMesh;
-			bool preParamChk = true;/*ParameterチェックOK有無*/
+			IKRig = ImportUI->IKRig;
+			bool preParamChk = true; /*ParameterチェックOK有無*/
 			/*包含関係チェック*/
 			if (SkeletalMesh)
 			{
@@ -311,7 +313,7 @@ Retry ImportOption!"
 					//TBD::ERR case
 					{
 						UE_LOG(LogMMD4UE4_VMDFactory, Error,
-							TEXT("ImportAnimations : Skeleton not equrl skeletalmesh->skelton ...")
+						       TEXT("ImportAnimations : Skeleton not equrl skeletalmesh->skelton ...")
 						);
 					}
 					preParamChk = false;
@@ -319,7 +321,6 @@ Retry ImportOption!"
 			}
 			if (preParamChk)
 			{
-
 				////////////////////////////////////
 				if (!ImportOptions->AnimSequenceAsset)
 				{
@@ -329,6 +330,7 @@ Retry ImportOption!"
 						SkeletalMesh,
 						InParent,
 						Name.ToString(),
+						IKRig,
 						ImportUI->MMD2UE4NameTableRow,
 						ImportUI->MmdExtendAsset,
 						&vmdMotionInfo
@@ -340,7 +342,7 @@ Retry ImportOption!"
 					// add morph curve only to exist ainimation
 					LastCreatedAnim = AddtionalMorphCurveImportToAnimations(
 						SkeletalMesh,
-						ImportOptions->AnimSequenceAsset,//UAnimSequence* exsistAnimSequ,
+						ImportOptions->AnimSequenceAsset, //UAnimSequence* exsistAnimSequ,
 						ImportUI->MMD2UE4NameTableRow,
 						&vmdMotionInfo
 					);
@@ -351,15 +353,15 @@ Retry ImportOption!"
 				//TBD::ERR case
 				{
 					UE_LOG(LogMMD4UE4_VMDFactory, Error,
-						TEXT("ImportAnimations : preParamChk false. import ERROR !!!! ...")
+					       TEXT("ImportAnimations : preParamChk false. import ERROR !!!! ...")
 					);
 				}
 			}
 		}
 		else
 		{
-			UE_LOG(LogMMD4UE4_VMDFactory, Warning, 
-				TEXT("VMD Import Cancel"));
+			UE_LOG(LogMMD4UE4_VMDFactory, Warning,
+			       TEXT("VMD Import Cancel"));
 		}
 	}
 	else
@@ -367,7 +369,7 @@ Retry ImportOption!"
 		//カメラアニメーションのインポート処理
 		//今後実装予定？
 		UE_LOG(LogMMD4UE4_VMDFactory, Warning,
-			TEXT("VMD Import Cancel::Camera root... not impl"));
+		       TEXT("VMD Import Cancel::Camera root... not impl"));
 
 		LastCreatedAnim = NULL;
 		//未実装なのでコメントアウト
@@ -388,25 +390,25 @@ Retry ImportOption!"
 		{
 			//import error
 		}
-#endif 
+#endif
 	}
 	return LastCreatedAnim;
 };
 
-UAnimSequence * UVmdFactory::ImportAnimations(
+UAnimSequence* UVmdFactory::ImportAnimations(
 	USkeleton* Skeleton,
 	USkeletalMesh* SkeletalMesh,
 	UObject* Outer,
 	const FString& Name,
 	//UFbxAnimSequenceImportData* TemplateImportData, 
 	//TArray<FbxNode*>& NodeArray
+	UIKRigDefinition* IKRig,
 	UDataTable* ReNameTable,
 	UMMDExtendAsset* mmdExtend,
 	MMD4UE4::VmdMotionInfo* vmdMotionInfo
-	)
+)
 {
 	UAnimSequence* LastCreatedAnim = NULL;
-
 
 
 	// we need skeleton to create animsequence
@@ -415,7 +417,7 @@ UAnimSequence * UVmdFactory::ImportAnimations(
 		//TBD::ERR case
 		{
 			UE_LOG(LogMMD4UE4_VMDFactory, Error,
-				TEXT("ImportAnimations : args Skeleton is null ...")
+			       TEXT("ImportAnimations : args Skeleton is null ...")
 			);
 		}
 		return NULL;
@@ -434,10 +436,11 @@ UAnimSequence * UVmdFactory::ImportAnimations(
 		// See if this sequence already exists.
 		SequenceName = ObjectTools::SanitizeObjectName(SequenceName);
 
-		FString 	ParentPath = FString::Printf(TEXT("%s/%s"), *FPackageName::GetLongPackagePath(*Outer->GetName()), *SequenceName);
-		UObject* 	ParentPackage = CreatePackage( *ParentPath);
+		FString ParentPath = FString::Printf(TEXT("%s/%s"), *FPackageName::GetLongPackagePath(*Outer->GetName()),
+		                                     *SequenceName);
+		UObject* ParentPackage = CreatePackage(*ParentPath);
 		UObject* Object = LoadObject<UObject>(ParentPackage, *SequenceName, NULL, LOAD_None, NULL);
-		UAnimSequence * DestSeq = Cast<UAnimSequence>(Object);
+		UAnimSequence* DestSeq = Cast<UAnimSequence>(Object);
 		// if object with same name exists, warn user
 		if (Object && !DestSeq)
 		{
@@ -449,7 +452,7 @@ UAnimSequence * UVmdFactory::ImportAnimations(
 		// If not, create new one now.
 		if (!DestSeq)
 		{
-			DestSeq = NewObject<UAnimSequence>( ParentPackage, *SequenceName, RF_Public | RF_Standalone);
+			DestSeq = NewObject<UAnimSequence>(ParentPackage, *SequenceName, RF_Public | RF_Standalone);
 
 			// Notify the asset registry
 			FAssetRegistryModule::AssetCreated(DestSeq);
@@ -478,31 +481,31 @@ UAnimSequence * UVmdFactory::ImportAnimations(
 	{
 		bool importSuccessFlag = true;
 		/* vmd animation regist*/
-		if (!ImportVMDToAnimSequence(LastCreatedAnim, Skeleton, ReNameTable, mmdExtend, vmdMotionInfo))
+		if (!ImportVMDToAnimSequence(LastCreatedAnim, Skeleton, ReNameTable, IKRig, mmdExtend, vmdMotionInfo))
 		{
 			//TBD::ERR case
 			check(false);
 			importSuccessFlag = false;
 		}
 		/* morph animation regist*/
-		if (!ImportMorphCurveToAnimSequence(LastCreatedAnim, Skeleton, SkeletalMesh, ReNameTable,vmdMotionInfo))
+		if (!ImportMorphCurveToAnimSequence(LastCreatedAnim, Skeleton, SkeletalMesh, ReNameTable, vmdMotionInfo))
 		{
 			//TBD::ERR case
 			{
 				UE_LOG(LogMMD4UE4_VMDFactory, Error,
-					TEXT("ImportMorphCurveToAnimSequence is false root...")
-					);
+				       TEXT("ImportMorphCurveToAnimSequence is false root...")
+				);
 			}
 			//check(false);
 			importSuccessFlag = false;
 		}
 
 		/*Import正常時にPreviewMeshを更新する*/
-		if ( (importSuccessFlag) && (SkeletalMesh) )
+		if ((importSuccessFlag) && (SkeletalMesh))
 		{
 			LastCreatedAnim->SetPreviewMesh(SkeletalMesh);
 			UE_LOG(LogMMD4UE4_VMDFactory, Log,
-				TEXT("[ImportAnimations] Set PreviewMesh Pointer.")
+			       TEXT("[ImportAnimations] Set PreviewMesh Pointer.")
 			);
 		}
 	}
@@ -534,10 +537,9 @@ UAnimSequence * UVmdFactory::ImportAnimations(
 
 			adc.CloseBracket();
 
-				// mark package as dirty
-				MarkPackageDirty();
+			// mark package as dirty
+			MarkPackageDirty();
 			SkeletalMesh->MarkPackageDirty();
-
 
 
 			LastCreatedAnim->PostEditChange();
@@ -558,9 +560,11 @@ UAnimSequence * UVmdFactory::ImportAnimations(
 * x1~y2 : 0 <= xy <= 1 :bezier points
 * x : 0<= x <= 1 : frame rate
 ******************************************************************************/
-float UVmdFactory::interpolateBezier(float x1, float y1, float  x2, float y2, float x) {
+float UVmdFactory::interpolateBezier(float x1, float y1, float x2, float y2, float x)
+{
 	float t = 0.5, s = 0.5;
-	for (int i = 0; i < 15; i++) {
+	for (int i = 0; i < 15; i++)
+	{
 		float ft = (3 * s * s * t * x1) + (3 * s * t * t * x2) + (t * t * t) - x;
 		if (ft == 0) break; // Math.abs(ft) < 0.00001 でもいいかも
 		if (FGenericPlatformMath::Abs(ft) < 0.0001) break;
@@ -572,6 +576,7 @@ float UVmdFactory::interpolateBezier(float x1, float y1, float  x2, float y2, fl
 	}
 	return (3 * s * s * t * y1) + (3 * s * t * t * y2) + (t * t * t);
 }
+
 /** End **********************************************************************/
 
 
@@ -579,12 +584,12 @@ float UVmdFactory::interpolateBezier(float x1, float y1, float  x2, float y2, fl
 * 既存AnimSequのアセットにVMDの表情データを追加する処理
 * MMD4Mecanimuとの総合利用向けテスト機能
 **********************/
-UAnimSequence * UVmdFactory::AddtionalMorphCurveImportToAnimations(
+UAnimSequence* UVmdFactory::AddtionalMorphCurveImportToAnimations(
 	USkeletalMesh* SkeletalMesh,
 	UAnimSequence* exsistAnimSequ,
 	UDataTable* ReNameTable,
 	MMD4UE4::VmdMotionInfo* vmdMotionInfo
-	)
+)
 {
 	USkeleton* Skeleton = NULL;
 	// we need skeleton to create animsequence
@@ -607,12 +612,12 @@ UAnimSequence * UVmdFactory::AddtionalMorphCurveImportToAnimations(
 		//exsistAnimSequ->SequenceLength = FGenericPlatformMath::Max<float>(1.0f / 30.0f*(float)exsistAnimSequ->NumFrames, MINIMUM_ANIMATION_LENGTH);
 		/////////////////////////////////
 		if (!ImportMorphCurveToAnimSequence(
-			exsistAnimSequ,
-			Skeleton, 
-			SkeletalMesh,
-			ReNameTable, 
-			vmdMotionInfo)
-			)
+				exsistAnimSequ,
+				Skeleton,
+				SkeletalMesh,
+				ReNameTable,
+				vmdMotionInfo)
+		)
 		{
 			//TBD::ERR case
 			check(false);
@@ -636,7 +641,7 @@ UAnimSequence * UVmdFactory::AddtionalMorphCurveImportToAnimations(
 		{
 			// otherwise just compress
 			//exsistAnimSequ->PostProcessSequence();
-			
+
 			auto& adc = exsistAnimSequ->GetController();
 			adc.OpenBracket(LOCTEXT("ImportAsSkeletalMesh", "Importing VMD Animation"));
 
@@ -653,7 +658,6 @@ UAnimSequence * UVmdFactory::AddtionalMorphCurveImportToAnimations(
 			SkeletalMesh->MarkPackageDirty();
 
 
-
 			exsistAnimSequ->PostEditChange();
 			exsistAnimSequ->SetPreviewMesh(SkeletalMesh);
 			exsistAnimSequ->MarkPackageDirty();
@@ -665,6 +669,7 @@ UAnimSequence * UVmdFactory::AddtionalMorphCurveImportToAnimations(
 
 	return exsistAnimSequ;
 }
+
 /*******************
 * Import Morph Target AnimCurve
 * VMDファイルのデータからMorphtargetのFloatCurveをAnimSeqに取り込む
@@ -675,7 +680,7 @@ bool UVmdFactory::ImportMorphCurveToAnimSequence(
 	USkeletalMesh* SkeletalMesh,
 	UDataTable* ReNameTable,
 	MMD4UE4::VmdMotionInfo* vmdMotionInfo
-	)
+)
 {
 	if (!DestSeq || !Skeleton || !vmdMotionInfo)
 	{
@@ -683,7 +688,7 @@ bool UVmdFactory::ImportMorphCurveToAnimSequence(
 		return false;
 	}
 	//USkeletalMesh * mesh = Skeleton->GetAssetPreviewMesh(DestSeq);// GetPreviewMesh();
-	USkeletalMesh * mesh = SkeletalMesh;
+	USkeletalMesh* mesh = SkeletalMesh;
 	if (!mesh)
 	{
 		//このルートに入る条件がSkeleton Asset生成後一度もアセットを開いていない場合、
@@ -691,15 +696,15 @@ bool UVmdFactory::ImportMorphCurveToAnimSequence(
 		//TDB::ERR.  previewMesh is Null
 		{
 			UE_LOG(LogMMD4UE4_VMDFactory, Error,
-				TEXT("ImportMorphCurveToAnimSequence GetAssetPreviewMesh Not Found...")
-				);
+			       TEXT("ImportMorphCurveToAnimSequence GetAssetPreviewMesh Not Found...")
+			);
 		}
 		return false;
 	}
 	/* morph animation regist*/
 	for (int i = 0; i < vmdMotionInfo->keyFaceList.Num(); ++i)
 	{
-		MMD4UE4::VmdFaceTrackList * vmdFaceTrackPtr = &vmdMotionInfo->keyFaceList[i];
+		MMD4UE4::VmdFaceTrackList* vmdFaceTrackPtr = &vmdMotionInfo->keyFaceList[i];
 		/********************************************/
 		//original
 		FName Name = *vmdFaceTrackPtr->TrackName;
@@ -710,20 +715,20 @@ bool UVmdFactory::ImportMorphCurveToAnimSequence(
 #else	/* UE4.11~ over */
 		const FSmartNameMapping* NameMapping
 			//= const_cast<FSmartNameMapping*>(Skeleton->GetSmartNameContainer(USkeleton::AnimCurveMappingName));//UE4.11~
-			= Skeleton->GetSmartNameContainer(USkeleton::AnimCurveMappingName);//UE4.11~
+			= Skeleton->GetSmartNameContainer(USkeleton::AnimCurveMappingName); //UE4.11~
 #endif
 		/**********************************/
 		//self
 		if (mesh != NULL)
 		{
-			UMorphTarget * morphTargetPtr = mesh->FindMorphTarget(Name);
+			UMorphTarget* morphTargetPtr = mesh->FindMorphTarget(Name);
 			if (!morphTargetPtr)
 			{
 				//TDB::ERR. not found Morph Target(Name) in mesh
 				{
 					UE_LOG(LogMMD4UE4_VMDFactory, Warning,
-						TEXT("ImportMorphCurveToAnimSequence Target Morph Not Found...Search[%s]VMD-Org[%s]"),
-						*Name.ToString(), *vmdFaceTrackPtr->TrackName);
+					       TEXT("ImportMorphCurveToAnimSequence Target Morph Not Found...Search[%s]VMD-Org[%s]"),
+					       *Name.ToString(), *vmdFaceTrackPtr->TrackName);
 				}
 				continue;
 			}
@@ -742,21 +747,23 @@ bool UVmdFactory::ImportMorphCurveToAnimSequence(
 		// FloatCurve for Morph Target 
 		int CurveFlags = AACF_DriveMorphTarget_DEPRECATED;
 
-		FFloatCurve * CurveToImport
-			= static_cast<FFloatCurve *>(DestSeq->RawCurveData.GetCurveData(NewName.UID, ERawCurveTrackTypes::RCT_Float));
+		FFloatCurve* CurveToImport
+			= static_cast<FFloatCurve*>(DestSeq->RawCurveData.
+			                                     GetCurveData(NewName.UID, ERawCurveTrackTypes::RCT_Float));
 		if (CurveToImport == NULL)
 		{
 			if (DestSeq->RawCurveData.AddCurveData(NewName, CurveFlags))
 			{
 				CurveToImport
-					= static_cast<FFloatCurve *> (DestSeq->RawCurveData.GetCurveData(NewName.UID, ERawCurveTrackTypes::RCT_Float));
+					= static_cast<FFloatCurve*>(DestSeq->RawCurveData.GetCurveData(
+						NewName.UID, ERawCurveTrackTypes::RCT_Float));
 				CurveToImport->Name = NewName;
 			}
 			else
 			{
 				// this should not happen, we already checked before adding
 				UE_LOG(LogMMD4UE4_VMDFactory, Warning,
-					TEXT("VMD Import: Critical error: no memory?"));
+				       TEXT("VMD Import: Critical error: no memory?"));
 			}
 		}
 		else
@@ -765,9 +772,9 @@ bool UVmdFactory::ImportMorphCurveToAnimSequence(
 			// if existing add these curve flags. 
 			CurveToImport->SetCurveTypeFlags(CurveFlags | CurveToImport->GetCurveTypeFlags());
 		}
-		
+
 		/**********************************************/
-		MMD4UE4::VMD_FACE_KEY * faceKeyPtr = NULL;
+		MMD4UE4::VMD_FACE_KEY* faceKeyPtr = NULL;
 		for (int s = 0; s < vmdFaceTrackPtr->keyList.Num(); ++s)
 		{
 			check(vmdFaceTrackPtr->sortIndexList[s] < vmdFaceTrackPtr->keyList.Num());
@@ -794,8 +801,10 @@ bool UVmdFactory::ImportMorphCurveToAnimSequence(
 		if (true)
 		{
 			UE_LOG(LogMMD4UE4_VMDFactory, Log,
-				TEXT("ImportMorphCurveToAnimSequence Target Morph compleat...NameSearch[%s]VMD-Org[%s], KeyListNum[%d]"),
-				*Name.ToString(), *vmdFaceTrackPtr->TrackName, vmdFaceTrackPtr->keyList.Num() );
+			       TEXT(
+				       "ImportMorphCurveToAnimSequence Target Morph compleat...NameSearch[%s]VMD-Org[%s], KeyListNum[%d]"
+			       ),
+			       *Name.ToString(), *vmdFaceTrackPtr->TrackName, vmdFaceTrackPtr->keyList.Num());
 		}
 		/***********************************************************************************/
 	}
@@ -811,41 +820,44 @@ bool UVmdFactory::ImportVMDToAnimSequence(
 	UAnimSequence* DestSeq,
 	USkeleton* Skeleton,
 	UDataTable* ReNameTable,
+	UIKRigDefinition* IKRig,
 	UMMDExtendAsset* mmdExtend,
 	MMD4UE4::VmdMotionInfo* vmdMotionInfo
-	)
+)
 {
 	// nullptr check in-param
 	if (!DestSeq || !Skeleton || !vmdMotionInfo)
 	{
 		UE_LOG(LogMMD4UE4_VMDFactory, Error,
-			TEXT("ImportVMDToAnimSequence : Ref InParam is Null. DestSeq[%x],Skelton[%x],vmdMotionInfo[%x]"),
-			DestSeq, Skeleton, vmdMotionInfo );
+		       TEXT("ImportVMDToAnimSequence : Ref InParam is Null. DestSeq[%x],Skelton[%x],vmdMotionInfo[%x]"),
+		       DestSeq, Skeleton, vmdMotionInfo);
 		//TBD:: ERR in Param...
 		return false;
 	}
 	if (!ReNameTable)
 	{
 		UE_LOG(LogMMD4UE4_VMDFactory, Warning,
-			TEXT("ImportVMDToAnimSequence : Target ReNameTable is null."));
+		       TEXT("ImportVMDToAnimSequence : Target ReNameTable is null."));
 	}
 	if (!mmdExtend)
 	{
 		UE_LOG(LogMMD4UE4_VMDFactory, Warning,
-			TEXT("ImportVMDToAnimSequence : Target MMDExtendAsset is null."));
+		       TEXT("ImportVMDToAnimSequence : Target MMDExtendAsset is null."));
 	}
 
 	//UAnimDataController* uc = new UAnimDataController();
 	/********************************/
 
 	//double fps=DestSeq->GetFrameRate();
-	auto &adc = DestSeq->GetController();
+	auto& adc = DestSeq->GetController();
+	//auto ControlRig = UIKRigController::GetIKRigController(IKRig);
 
-	adc.SetFrameRate(FFrameRate(30, 1));// DestSeq->SetRawNumberOfFrame(vmdMotionInfo->maxFrame);
+	adc.SetFrameRate(FFrameRate(30, 1)); // DestSeq->SetRawNumberOfFrame(vmdMotionInfo->maxFrame);
 	adc.NotifyPopulated();
-	adc.SetPlayLength(FGenericPlatformMath::Max<float>(1.0f / 30.0f * (float)vmdMotionInfo->maxFrame, MINIMUM_ANIMATION_LENGTH));
+	adc.SetPlayLength(
+		FGenericPlatformMath::Max<float>(1.0f / 30.0f * (float)vmdMotionInfo->maxFrame, MINIMUM_ANIMATION_LENGTH));
 
-	
+
 	//DestSeq->SequenceLength = FGenericPlatformMath::Max<float>(1.0f / 30.0f * (float)vmdMotionInfo->maxFrame, MINIMUM_ANIMATION_LENGTH);
 	/////////////////////////////////
 	const int32 NumBones = Skeleton->GetReferenceSkeleton().GetNum();
@@ -892,13 +904,14 @@ bool UVmdFactory::ImportVMDToAnimSequence(
 			}
 		}
 
-		int vmdKeyListIndex = vmdMotionInfo->FindKeyTrackName(targetName.ToString(), MMD4UE4::VmdMotionInfo::EVMD_KEYBONE);
+		int vmdKeyListIndex = vmdMotionInfo->FindKeyTrackName(targetName.ToString(),
+		                                                      MMD4UE4::VmdMotionInfo::EVMD_KEYBONE);
 		if (vmdKeyListIndex == -1)
 		{
 			{
 				UE_LOG(LogMMD4UE4_VMDFactory, Warning,
-					TEXT("ImportVMDToAnimSequence Target Bone Not Found...[%s]"),
-					*targetName.ToString());
+				       TEXT("ImportVMDToAnimSequence Target Bone Not Found...[%s]"),
+				       *targetName.ToString());
 			}
 			//nop
 			//フレーム分同じ値を設定する
@@ -924,9 +937,9 @@ bool UVmdFactory::ImportVMDToAnimSequence(
 
 			{
 				UE_LOG(LogMMD4UE4_VMDFactory, Log,
-					TEXT("ImportVMDToAnimSequence Target Bone Found...Name[%s]-KeyNum[%d]"),
-					*targetName.ToString(),
-					kybone.sortIndexList.Num() );
+				       TEXT("ImportVMDToAnimSequence Target Bone Found...Name[%s]-KeyNum[%d]"),
+				       *targetName.ToString(),
+				       kybone.sortIndexList.Num());
 			}
 			bool dbg = false;
 			if (targetName == L"右ひじ")
@@ -934,7 +947,16 @@ bool UVmdFactory::ImportVMDToAnimSequence(
 			//事前に各Trackに対し親Bone抜きにLocal座標で全登録予定のフレーム計算しておく（もっと良い処理があれば…検討）
 			//90度以上の軸回転が入るとクォータニオンの為か処理に誤りがあるかで余計な回転が入ってしまう。
 			//→上記により、単にZ回転（ターンモーション）で下半身と上半身の軸が物理的にありえない回転の組み合わせになる。バグ。
-			
+
+			if (targetName == L"右足ＩＫ")
+			{
+				UE_LOG(LogMMD4UE4_VMDFactory, Log, TEXT("右足ＩＫ"));
+			}
+			if (targetName == L"左足ＩＫ")
+			{
+				UE_LOG(LogMMD4UE4_VMDFactory, Log, TEXT("左足ＩＫ"));
+			}
+
 
 			for (int32 i = 0; i < DestSeq->GetNumberOfSampledKeys(); i++)
 			{
@@ -944,18 +966,18 @@ bool UVmdFactory::ImportVMDToAnimSequence(
 					{
 						FTransform tempTranceform(
 							FQuat(
-							kybone.keyList[nextKeyIndex].Quaternion[0],
-							kybone.keyList[nextKeyIndex].Quaternion[2] * (-1),
-							kybone.keyList[nextKeyIndex].Quaternion[1],
-							kybone.keyList[nextKeyIndex].Quaternion[3]
+								kybone.keyList[nextKeyIndex].Quaternion[0],
+								kybone.keyList[nextKeyIndex].Quaternion[2] * (-1),
+								kybone.keyList[nextKeyIndex].Quaternion[1],
+								kybone.keyList[nextKeyIndex].Quaternion[3]
 							),
 							FVector(
-							kybone.keyList[nextKeyIndex].Position[0],
-							kybone.keyList[nextKeyIndex].Position[2] * (-1),
-							kybone.keyList[nextKeyIndex].Position[1]
-							)*10.0f,
+								kybone.keyList[nextKeyIndex].Position[0],
+								kybone.keyList[nextKeyIndex].Position[2] * (-1),
+								kybone.keyList[nextKeyIndex].Position[1]
+							) * 10.0f,
 							FVector(1, 1, 1)
-							);
+						);
 						//リファレンスポーズからKeyのポーズ分移動させた値を初期値とする
 						RawTrack.PosKeys.Add(FVector3f(tempTranceform.GetTranslation() + refTranslation));
 						RawTrack.RotKeys.Add(FQuat4f(tempTranceform.GetRotation()));
@@ -963,22 +985,21 @@ bool UVmdFactory::ImportVMDToAnimSequence(
 
 						preKeyIndex = nextKeyIndex;
 						uint32 lastKF = nextKeyFrame;
-						while (sortIndex + 1 < kybone.sortIndexList.Num() && kybone.keyList[nextKeyIndex].Frame <= lastKF)
+						while (sortIndex + 1 < kybone.sortIndexList.Num() && kybone.keyList[nextKeyIndex].Frame <=
+							lastKF)
 						{
 							sortIndex++;
 							nextKeyIndex = kybone.sortIndexList[sortIndex];
-
 						}
 						lastKF = nextKeyFrame = kybone.keyList[nextKeyIndex].Frame;
 
-						while (sortIndex + 1 < kybone.sortIndexList.Num() && kybone.keyList[kybone.sortIndexList[sortIndex + 1]].Frame == lastKF)
+						while (sortIndex + 1 < kybone.sortIndexList.Num() && kybone.keyList[kybone.sortIndexList[
+							sortIndex + 1]].Frame == lastKF)
 						{
 							sortIndex++;
 							nextKeyIndex = kybone.sortIndexList[sortIndex];
-
 						}
 						nextKeyFrame = kybone.keyList[nextKeyIndex].Frame;
-
 					}
 					else
 					{
@@ -986,7 +1007,7 @@ bool UVmdFactory::ImportVMDToAnimSequence(
 						//例外処理。初期フレーム(0)にKeyが設定されていない
 						FTransform nrmTrnc;
 						nrmTrnc.SetIdentity();
-						RawTrack.PosKeys.Add(FVector3f(nrmTrnc.GetTranslation()+ refTranslation));
+						RawTrack.PosKeys.Add(FVector3f(nrmTrnc.GetTranslation() + refTranslation));
 						RawTrack.RotKeys.Add(FQuat4f(nrmTrnc.GetRotation()));
 						RawTrack.ScaleKeys.Add(FVector3f(nrmTrnc.GetScale3D()));
 					}
@@ -1004,72 +1025,88 @@ bool UVmdFactory::ImportVMDToAnimSequence(
 
 					if (nextKeyIndex > 0)
 					{
-						MMD4UE4::VMD_KEY & PreKey = kybone.keyList[preKeyIndex];
-						MMD4UE4::VMD_KEY & NextKey = kybone.keyList[nextKeyIndex];
+						MMD4UE4::VMD_KEY& PreKey = kybone.keyList[preKeyIndex];
+						MMD4UE4::VMD_KEY& NextKey = kybone.keyList[nextKeyIndex];
 						if (NextKey.Frame <= (uint32)i)
 						{
 							blendRate = 1.0f;
 						}
 						else
-						{ 
+						{
 							//TBD::フレーム間が1だと0.5で計算されない?
-							blendRate = 1.0f - (float)(NextKey.Frame - (uint32)i) / (float)(NextKey.Frame - PreKey.Frame);
+							blendRate = 1.0f - (float)(NextKey.Frame - (uint32)i) / (float)(NextKey.Frame - PreKey.
+								Frame);
 						}
 						//pose
 						NextTranc.SetLocation(
 							FVector(
-							NextKey.Position[0],
-							NextKey.Position[2] * (-1),
-							NextKey.Position[1]
+								NextKey.Position[0],
+								NextKey.Position[2] * (-1),
+								NextKey.Position[1]
 							));
 						PreTranc.SetLocation(
 							FVector(
-							PreKey.Position[0],
-							PreKey.Position[2] * (-1),
-							PreKey.Position[1]
+								PreKey.Position[0],
+								PreKey.Position[2] * (-1),
+								PreKey.Position[1]
 							));
 
 						NowTranc.SetLocation(
 							FVector(
-							interpolateBezier(
-							NextKey.Bezier[D_VMD_KEY_BEZIER_AR_0_BEZ_0][D_VMD_KEY_BEZIER_AR_1_BEZ_X][D_VMD_KEY_BEZIER_AR_2_KND_X] / 127.0f,
-							NextKey.Bezier[D_VMD_KEY_BEZIER_AR_0_BEZ_0][D_VMD_KEY_BEZIER_AR_1_BEZ_Y][D_VMD_KEY_BEZIER_AR_2_KND_X] / 127.0f,
-							NextKey.Bezier[D_VMD_KEY_BEZIER_AR_0_BEZ_1][D_VMD_KEY_BEZIER_AR_1_BEZ_X][D_VMD_KEY_BEZIER_AR_2_KND_X] / 127.0f,
-							NextKey.Bezier[D_VMD_KEY_BEZIER_AR_0_BEZ_1][D_VMD_KEY_BEZIER_AR_1_BEZ_Y][D_VMD_KEY_BEZIER_AR_2_KND_X] / 127.0f,
-							blendRate
-							)*(NextTranc.GetTranslation().X - PreTranc.GetTranslation().X) + PreTranc.GetTranslation().X
-							,
-							interpolateBezier(
-							NextKey.Bezier[D_VMD_KEY_BEZIER_AR_0_BEZ_0][D_VMD_KEY_BEZIER_AR_1_BEZ_X][D_VMD_KEY_BEZIER_AR_2_KND_Z] / 127.0f,
-							NextKey.Bezier[D_VMD_KEY_BEZIER_AR_0_BEZ_0][D_VMD_KEY_BEZIER_AR_1_BEZ_Y][D_VMD_KEY_BEZIER_AR_2_KND_Z] / 127.0f,
-							NextKey.Bezier[D_VMD_KEY_BEZIER_AR_0_BEZ_1][D_VMD_KEY_BEZIER_AR_1_BEZ_X][D_VMD_KEY_BEZIER_AR_2_KND_Z] / 127.0f,
-							NextKey.Bezier[D_VMD_KEY_BEZIER_AR_0_BEZ_1][D_VMD_KEY_BEZIER_AR_1_BEZ_Y][D_VMD_KEY_BEZIER_AR_2_KND_Z] / 127.0f,
-							blendRate
-							)*(NextTranc.GetTranslation().Y - PreTranc.GetTranslation().Y) + PreTranc.GetTranslation().Y
-							,
-							interpolateBezier(
-							NextKey.Bezier[D_VMD_KEY_BEZIER_AR_0_BEZ_0][D_VMD_KEY_BEZIER_AR_1_BEZ_X][D_VMD_KEY_BEZIER_AR_2_KND_Y] / 127.0f,
-							NextKey.Bezier[D_VMD_KEY_BEZIER_AR_0_BEZ_0][D_VMD_KEY_BEZIER_AR_1_BEZ_Y][D_VMD_KEY_BEZIER_AR_2_KND_Y] / 127.0f,
-							NextKey.Bezier[D_VMD_KEY_BEZIER_AR_0_BEZ_1][D_VMD_KEY_BEZIER_AR_1_BEZ_X][D_VMD_KEY_BEZIER_AR_2_KND_Y] / 127.0f,
-							NextKey.Bezier[D_VMD_KEY_BEZIER_AR_0_BEZ_1][D_VMD_KEY_BEZIER_AR_1_BEZ_Y][D_VMD_KEY_BEZIER_AR_2_KND_Y] / 127.0f,
-							blendRate
-							)*(NextTranc.GetTranslation().Z - PreTranc.GetTranslation().Z) + PreTranc.GetTranslation().Z
+								interpolateBezier(
+									NextKey.Bezier[D_VMD_KEY_BEZIER_AR_0_BEZ_0][D_VMD_KEY_BEZIER_AR_1_BEZ_X][
+										D_VMD_KEY_BEZIER_AR_2_KND_X] / 127.0f,
+									NextKey.Bezier[D_VMD_KEY_BEZIER_AR_0_BEZ_0][D_VMD_KEY_BEZIER_AR_1_BEZ_Y][
+										D_VMD_KEY_BEZIER_AR_2_KND_X] / 127.0f,
+									NextKey.Bezier[D_VMD_KEY_BEZIER_AR_0_BEZ_1][D_VMD_KEY_BEZIER_AR_1_BEZ_X][
+										D_VMD_KEY_BEZIER_AR_2_KND_X] / 127.0f,
+									NextKey.Bezier[D_VMD_KEY_BEZIER_AR_0_BEZ_1][D_VMD_KEY_BEZIER_AR_1_BEZ_Y][
+										D_VMD_KEY_BEZIER_AR_2_KND_X] / 127.0f,
+									blendRate
+								) * (NextTranc.GetTranslation().X - PreTranc.GetTranslation().X) + PreTranc.
+								GetTranslation().X
+								,
+								interpolateBezier(
+									NextKey.Bezier[D_VMD_KEY_BEZIER_AR_0_BEZ_0][D_VMD_KEY_BEZIER_AR_1_BEZ_X][
+										D_VMD_KEY_BEZIER_AR_2_KND_Z] / 127.0f,
+									NextKey.Bezier[D_VMD_KEY_BEZIER_AR_0_BEZ_0][D_VMD_KEY_BEZIER_AR_1_BEZ_Y][
+										D_VMD_KEY_BEZIER_AR_2_KND_Z] / 127.0f,
+									NextKey.Bezier[D_VMD_KEY_BEZIER_AR_0_BEZ_1][D_VMD_KEY_BEZIER_AR_1_BEZ_X][
+										D_VMD_KEY_BEZIER_AR_2_KND_Z] / 127.0f,
+									NextKey.Bezier[D_VMD_KEY_BEZIER_AR_0_BEZ_1][D_VMD_KEY_BEZIER_AR_1_BEZ_Y][
+										D_VMD_KEY_BEZIER_AR_2_KND_Z] / 127.0f,
+									blendRate
+								) * (NextTranc.GetTranslation().Y - PreTranc.GetTranslation().Y) + PreTranc.
+								GetTranslation().Y
+								,
+								interpolateBezier(
+									NextKey.Bezier[D_VMD_KEY_BEZIER_AR_0_BEZ_0][D_VMD_KEY_BEZIER_AR_1_BEZ_X][
+										D_VMD_KEY_BEZIER_AR_2_KND_Y] / 127.0f,
+									NextKey.Bezier[D_VMD_KEY_BEZIER_AR_0_BEZ_0][D_VMD_KEY_BEZIER_AR_1_BEZ_Y][
+										D_VMD_KEY_BEZIER_AR_2_KND_Y] / 127.0f,
+									NextKey.Bezier[D_VMD_KEY_BEZIER_AR_0_BEZ_1][D_VMD_KEY_BEZIER_AR_1_BEZ_X][
+										D_VMD_KEY_BEZIER_AR_2_KND_Y] / 127.0f,
+									NextKey.Bezier[D_VMD_KEY_BEZIER_AR_0_BEZ_1][D_VMD_KEY_BEZIER_AR_1_BEZ_Y][
+										D_VMD_KEY_BEZIER_AR_2_KND_Y] / 127.0f,
+									blendRate
+								) * (NextTranc.GetTranslation().Z - PreTranc.GetTranslation().Z) + PreTranc.
+								GetTranslation().Z
 							)
-							);
+						);
 						//rot
 						NextTranc.SetRotation(
 							FQuat(
-							NextKey.Quaternion[0],
-							NextKey.Quaternion[2] * (-1),
-							NextKey.Quaternion[1],
-							NextKey.Quaternion[3]
+								NextKey.Quaternion[0],
+								NextKey.Quaternion[2] * (-1),
+								NextKey.Quaternion[1],
+								NextKey.Quaternion[3]
 							));
 						PreTranc.SetRotation(
 							FQuat(
-							PreKey.Quaternion[0],
-							PreKey.Quaternion[2] * (-1),
-							PreKey.Quaternion[1],
-							PreKey.Quaternion[3]
+								PreKey.Quaternion[0],
+								PreKey.Quaternion[2] * (-1),
+								PreKey.Quaternion[1],
+								PreKey.Quaternion[3]
 							));
 #if 0
 						float tempBezR[4];
@@ -1114,15 +1151,19 @@ bool UVmdFactory::ImportVMDToAnimSequence(
 							);
 #else
 						float bezirT = interpolateBezier(
-							NextKey.Bezier[D_VMD_KEY_BEZIER_AR_0_BEZ_0][D_VMD_KEY_BEZIER_AR_1_BEZ_X][D_VMD_KEY_BEZIER_AR_2_KND_R] / 127.0f,
-							NextKey.Bezier[D_VMD_KEY_BEZIER_AR_0_BEZ_0][D_VMD_KEY_BEZIER_AR_1_BEZ_Y][D_VMD_KEY_BEZIER_AR_2_KND_R] / 127.0f,
-							NextKey.Bezier[D_VMD_KEY_BEZIER_AR_0_BEZ_1][D_VMD_KEY_BEZIER_AR_1_BEZ_X][D_VMD_KEY_BEZIER_AR_2_KND_R] / 127.0f,
-							NextKey.Bezier[D_VMD_KEY_BEZIER_AR_0_BEZ_1][D_VMD_KEY_BEZIER_AR_1_BEZ_Y][D_VMD_KEY_BEZIER_AR_2_KND_R] / 127.0f,
+							NextKey.Bezier[D_VMD_KEY_BEZIER_AR_0_BEZ_0][D_VMD_KEY_BEZIER_AR_1_BEZ_X][
+								D_VMD_KEY_BEZIER_AR_2_KND_R] / 127.0f,
+							NextKey.Bezier[D_VMD_KEY_BEZIER_AR_0_BEZ_0][D_VMD_KEY_BEZIER_AR_1_BEZ_Y][
+								D_VMD_KEY_BEZIER_AR_2_KND_R] / 127.0f,
+							NextKey.Bezier[D_VMD_KEY_BEZIER_AR_0_BEZ_1][D_VMD_KEY_BEZIER_AR_1_BEZ_X][
+								D_VMD_KEY_BEZIER_AR_2_KND_R] / 127.0f,
+							NextKey.Bezier[D_VMD_KEY_BEZIER_AR_0_BEZ_1][D_VMD_KEY_BEZIER_AR_1_BEZ_Y][
+								D_VMD_KEY_BEZIER_AR_2_KND_R] / 127.0f,
 							blendRate
-							);
+						);
 						NowTranc.SetRotation(
 							FQuat::Slerp(PreTranc.GetRotation(), NextTranc.GetRotation(), bezirT)
-							);
+						);
 						/*UE_LOG(LogMMD4UE4_VMDFactory, Warning,
 							TEXT("interpolateBezier Rot:[%s],F[%d/%d],BLD[%.2f],biz[%.2f]BEZ[%s]"),
 							*targetName.ToString(), i, NextKey.Frame, blendRate, bezirT,*NowTranc.GetRotation().ToString()
@@ -1133,16 +1174,16 @@ bool UVmdFactory::ImportVMDToAnimSequence(
 					{
 						NowTranc.SetLocation(
 							FVector(
-							kybone.keyList[nextKeyIndex].Position[0],
-							kybone.keyList[nextKeyIndex].Position[2] * (-1),
-							kybone.keyList[nextKeyIndex].Position[1]
+								kybone.keyList[nextKeyIndex].Position[0],
+								kybone.keyList[nextKeyIndex].Position[2] * (-1),
+								kybone.keyList[nextKeyIndex].Position[1]
 							));
 						NowTranc.SetRotation(
 							FQuat(
-							kybone.keyList[nextKeyIndex].Quaternion[0],
-							kybone.keyList[nextKeyIndex].Quaternion[2] * (-1),
-							kybone.keyList[nextKeyIndex].Quaternion[1],
-							kybone.keyList[nextKeyIndex].Quaternion[3]
+								kybone.keyList[nextKeyIndex].Quaternion[0],
+								kybone.keyList[nextKeyIndex].Quaternion[2] * (-1),
+								kybone.keyList[nextKeyIndex].Quaternion[1],
+								kybone.keyList[nextKeyIndex].Quaternion[3]
 							));
 						//TBD:このルートが存在する模様、処理の再検討が必要
 						//check(false);
@@ -1150,9 +1191,9 @@ bool UVmdFactory::ImportVMDToAnimSequence(
 
 					FTransform tempTranceform(
 						NowTranc.GetRotation(),
-						NowTranc.GetTranslation()*10.0f,
+						NowTranc.GetTranslation() * 10.0f,
 						FVector(1, 1, 1)
-						);
+					);
 					//リファレンスポーズからKeyのポーズ分移動させた値を初期値とする
 					RawTrack.PosKeys.Add(FVector3f(tempTranceform.GetTranslation() + refTranslation));
 					RawTrack.RotKeys.Add(FQuat4f(tempTranceform.GetRotation()));
@@ -1177,19 +1218,19 @@ bool UVmdFactory::ImportVMDToAnimSequence(
 #else
 						preKeyIndex = nextKeyIndex;
 						uint32 lastKF = nextKeyFrame;
-						while (sortIndex + 1 < kybone.sortIndexList.Num() && kybone.keyList[nextKeyIndex].Frame <= lastKF)
+						while (sortIndex + 1 < kybone.sortIndexList.Num() && kybone.keyList[nextKeyIndex].Frame <=
+							lastKF)
 						{
 							sortIndex++;
 							nextKeyIndex = kybone.sortIndexList[sortIndex];
-
 						}
 						lastKF = nextKeyFrame = kybone.keyList[nextKeyIndex].Frame;
 
-						while (sortIndex + 1 < kybone.sortIndexList.Num() && kybone.keyList[kybone.sortIndexList[sortIndex+1]].Frame == lastKF)
+						while (sortIndex + 1 < kybone.sortIndexList.Num() && kybone.keyList[kybone.sortIndexList[
+							sortIndex + 1]].Frame == lastKF)
 						{
 							sortIndex++;
 							nextKeyIndex = kybone.sortIndexList[sortIndex];
-
 						}
 						nextKeyFrame = kybone.keyList[nextKeyIndex].Frame;
 #endif
@@ -1199,7 +1240,7 @@ bool UVmdFactory::ImportVMDToAnimSequence(
 		}
 	}
 
-#if 0
+#if 1
 	////////////////////////////////////
 	//親ボーンの順番::TBD(IK用)
 	TArray<int> TempBoneTreeRefSkel;
@@ -1256,14 +1297,15 @@ bool UVmdFactory::ImportVMDToAnimSequence(
 			{
 				//移動後の位置 = 元の位置 + 平行移動
 				//移動後の回転 = 回転
-				RawTrack.PosKeys.Add(LocalRawTrack.PosKeys[k] + RefBonePose[BoneIndex].GetTranslation());
+				//RawTrack.PosKeys.Add(LocalRawTrack.PosKeys[k] + RefBonePose[BoneIndex].GetTranslation());
+				RawTrack.PosKeys.Add(LocalRawTrack.PosKeys[k] + RefBonePose[BoneIndex].GetTranslation().);
 				RawTrack.RotKeys.Add(LocalRawTrack.RotKeys[k]);
 				RawTrack.ScaleKeys.Add(LocalRawTrack.ScaleKeys[k]);
 			}
 		}
 	}
 #endif
-#if 0 /* :UE414: 4.14でAnimationの登録仕様が変わったため、いったん機能制限とする */
+#if 1 /* :UE414: 4.14でAnimationの登録仕様が変わったため、いったん機能制限とする */
 	if(mmdExtend)
 	{
 		FName targetName;
@@ -1367,8 +1409,11 @@ bool UVmdFactory::ImportVMDToAnimSequence(
 		//案1：各フレーム計算中に逐次処理
 		//案2：FKを全フレーム計算完了後にIKだけまとめてフレーム単位で再計算
 
+
+		auto AnimDataModel = DestSeq->GetDataModel();
 		//
-		for (int32 k = 0; k < DestSeq->NumFrames; k++)
+		//for (int32 k = 0; k < DestSeq->NumFrames; k++)
+		for (int32 k = 0; k < AnimDataModel->GetNumberOfFrames(); k++)
 		{
 			// ik Target loop func...
 			for (int32 ikTargetIndex = 0; ikTargetIndex < mmdExtend->IkInfoList.Num(); ++ikTargetIndex)
@@ -1789,7 +1834,7 @@ bool UVmdFactory::ImportVMDToAnimSequence(
 								float fSY = ChainBone_IKmat.M[2][0] / fCZ;
 								float fCY = ChainBone_IKmat.M[0][0] / fCZ;
 								float fY = FMath::Atan2(fSY, fCY);	// Z軸回り決定
-								
+
 								// 角度の制限
 								FVector fixRotAngleVec(fX, fY, fZ);
 								CheckLimitAngle(
@@ -1812,8 +1857,12 @@ bool UVmdFactory::ImportVMDToAnimSequence(
 							//QuatConvertFromMatrix(ChainBone->IKQuat, ChainBone->IKmat);
 							tempGlbIkBoneTrsf.SetFromMatrix(ChainBone_IKmat);
 							tempGlbIkBoneTrsf.SetScale3D(FVector(1));//reset scale
-							DestSeq->RawAnimationData[rawIndex].RotKeys[k]
-								= tempGlbIkBoneTrsf.GetRotation();
+							// DestSeq->RawAnimationData[rawIndex].RotKeys[k]
+							// 	= tempGlbIkBoneTrsf.GetRotation();
+							auto FRawAnimSequenceTracks = DestSeq->GetResampledTrackData();
+							FRawAnimSequenceTracks[rawIndex].InternalTrackData.RotKeys[k] = UE::Math::TQuat<float>(tempGlbIkBoneTrsf.GetRotation());
+
+
 #if 0
 							UE_LOG(LogMMD4UE4_VMDFactory, Warning,
 								TEXT("test.Loop[%d]LinkIndx[%d]Ke[%d]Nam[%s]Trf[%s]..."),
@@ -1832,8 +1881,10 @@ bool UVmdFactory::ImportVMDToAnimSequence(
 						else
 						{
 							//non limit
-							DestSeq->RawAnimationData[rawIndex].RotKeys[k]
-								= tempGlbIkBoneTrsf.GetRotation();
+							// DestSeq->RawAnimationData[rawIndex].RotKeys[k]
+							// 	= tempGlbIkBoneTrsf.GetRotation();
+							auto FRawAnimSequenceTracks = DestSeq->GetResampledTrackData();
+							FRawAnimSequenceTracks[rawIndex].InternalTrackData.RotKeys[k] = UE::Math::TQuat<float>(tempGlbIkBoneTrsf.GetRotation());
 						}
 						//////////////////////////////////////////////////
 #endif
@@ -1849,29 +1900,28 @@ bool UVmdFactory::ImportVMDToAnimSequence(
 	{
 		FName BoneName = Skeleton->GetReferenceSkeleton().GetBoneName(BoneIndex);
 
-		FRawAnimSequenceTrack &RawTrack = TempRawTrackList[BoneIndex];
+		FRawAnimSequenceTrack& RawTrack = TempRawTrackList[BoneIndex];
 
 		//DestSeq->AddNewRawTrack(BoneName, &RawTrack);
 
 		int32 NewTrackIndex = INDEX_NONE;
-		if (RawTrack.PosKeys.Num()>1)
+		if (RawTrack.PosKeys.Num() > 1)
 		{
 			NewTrackIndex = adc.AddBoneTrack(BoneName);
-			if (NewTrackIndex != INDEX_NONE )
+			if (NewTrackIndex != INDEX_NONE)
 			{
 				adc.SetBoneTrackKeys(BoneName, RawTrack.PosKeys, RawTrack.RotKeys, RawTrack.ScaleKeys);
 			}
 		}
-
-
 	}
 	adc.CloseBracket();
 	//GWarn->EndSlowTask();
 	return true;
 }
+
 //////////////////////////////////////////////////////////////////////////////////////
 // Ｘ軸を中心とした回転行列を作成する
-void CreateRotationXMatrix(FMatrix *Out, float Angle)
+void CreateRotationXMatrix(FMatrix* Out, float Angle)
 {
 	float Sin, Cos;
 
@@ -1882,7 +1932,7 @@ void CreateRotationXMatrix(FMatrix *Out, float Angle)
 	Cos = FMath::Cos(Angle);
 
 	//_MEMSET(Out, 0, sizeof(MATRIX));
-	FMemory::Memzero(Out,sizeof(FMatrix));
+	FMemory::Memzero(Out, sizeof(FMatrix));
 	Out->M[0][0] = 1.0f;
 	Out->M[1][1] = Cos;
 	Out->M[1][2] = Sin;
@@ -1892,8 +1942,9 @@ void CreateRotationXMatrix(FMatrix *Out, float Angle)
 
 	//return 0;
 }
+
 // 回転成分だけの行列の積を求める( ３×３以外の部分には値も代入しない )
-void MV1LoadModelToVMD_CreateMultiplyMatrixRotOnly(FMatrix *Out, FMatrix *In1, FMatrix *In2)
+void MV1LoadModelToVMD_CreateMultiplyMatrixRotOnly(FMatrix* Out, FMatrix* In1, FMatrix* In2)
 {
 	Out->M[0][0] = In1->M[0][0] * In2->M[0][0] + In1->M[0][1] * In2->M[1][0] + In1->M[0][2] * In2->M[2][0];
 	Out->M[0][1] = In1->M[0][0] * In2->M[0][1] + In1->M[0][1] * In2->M[1][1] + In1->M[0][2] * In2->M[2][1];
@@ -1907,16 +1958,17 @@ void MV1LoadModelToVMD_CreateMultiplyMatrixRotOnly(FMatrix *Out, FMatrix *In1, F
 	Out->M[2][1] = In1->M[2][0] * In2->M[0][1] + In1->M[2][1] * In2->M[1][1] + In1->M[2][2] * In2->M[2][1];
 	Out->M[2][2] = In1->M[2][0] * In2->M[0][2] + In1->M[2][1] * In2->M[1][2] + In1->M[2][2] * In2->M[2][2];
 }
+
 /////////////////////////////////////
 // 角度制限を判定する共通関数 (subIndexJdgの判定は割りと不明…)
 void CheckLimitAngle(
 	const FVector& RotMin,
 	const FVector& RotMax,
-	FVector * outAngle, //target angle ( in and out param)
+	FVector* outAngle, //target angle ( in and out param)
 	bool subIndexJdg //(ik link index < ik loop temp):: linkBoneIndex < ikt
-	)
+)
 {
-//#define DEBUG_CheckLimitAngle
+	//#define DEBUG_CheckLimitAngle
 #ifdef DEBUG_CheckLimitAngle
 	FVector debugVec = *outAngle;
 #endif
@@ -1956,7 +2008,7 @@ void CheckLimitAngle(
 		*outAngle,
 		RotMin,
 		RotMax
-		);
+	);
 #endif
 	//debug
 #ifdef DEBUG_CheckLimitAngle
@@ -1969,6 +2021,7 @@ void CheckLimitAngle(
 		);
 #endif
 }
+
 //////////////////////////////////////////////////////////////////////////////////////
 
 /*****************
@@ -1979,8 +2032,8 @@ void CheckLimitAngle(
 bool UVmdFactory::FindTableRowMMD2UEName(
 	UDataTable* ReNameTable,
 	FName mmdName,
-	FName * ue4Name
-	)
+	FName* ue4Name
+)
 {
 	if (ReNameTable == NULL || ue4Name == NULL)
 	{
@@ -2013,9 +2066,9 @@ bool UVmdFactory::FindTableRowMMD2UEName(
 * @param :TargetName is Target Bone Name
 ****************/
 int32 UVmdFactory::FindRefBoneInfoIndexFromBoneName(
-	const FReferenceSkeleton & RefSkelton,
-	const FName & TargetName
-	)
+	const FReferenceSkeleton& RefSkelton,
+	const FName& TargetName
+)
 {
 	for (int i = 0; i < RefSkelton.GetRefBoneInfo().Num(); ++i)
 	{
@@ -2038,7 +2091,7 @@ FTransform UVmdFactory::CalcGlbTransformFromBoneIndex(
 	USkeleton* Skeleton,
 	int32 BoneIndex,
 	int32 keyIndex
-	)
+)
 {
 	if (DestSeq == NULL || Skeleton == NULL || BoneIndex < 0 || keyIndex < 0)
 	{
@@ -2049,7 +2102,7 @@ FTransform UVmdFactory::CalcGlbTransformFromBoneIndex(
 	auto& dat = DestSeq->GetDataModel()->GetBoneAnimationTracks()[BoneIndex].InternalTrackData;
 
 	FTransform resultTrans(
-		FQuat(dat.RotKeys[keyIndex]),// qt.X, qt.Y, qt.Z, qt.W),
+		FQuat(dat.RotKeys[keyIndex]), // qt.X, qt.Y, qt.Z, qt.W),
 		FVector(dat.PosKeys[keyIndex]),
 		FVector(dat.ScaleKeys[keyIndex])
 	);
@@ -2063,7 +2116,7 @@ FTransform UVmdFactory::CalcGlbTransformFromBoneIndex(
 			Skeleton,
 			ParentBoneIndex,
 			keyIndex
-			);
+		);
 	}
 	return resultTrans;
 }

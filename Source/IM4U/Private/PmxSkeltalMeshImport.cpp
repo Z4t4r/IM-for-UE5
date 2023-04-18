@@ -38,6 +38,7 @@
 ////////////
 
 #include "PmxFactory.h"
+#include "Factory/VmdFactory.h"
 
 #include "LODUtilities.h"
 #define LOCTEXT_NAMESPACE "PMXSkeltalMeshImpoter"
@@ -1719,9 +1720,9 @@ void UPmxFactory::AddTokenizedErrorMessage(
 		case EMessageSeverity::Error:
 			UE_LOG(LogMMD4UE4_PMXFactory, Error, TEXT("%d_%s"), __LINE__, *(ErrorMsg->ToText().ToString()));
 			break;
-		case EMessageSeverity::CriticalError:
-			UE_LOG(LogMMD4UE4_PMXFactory, Error, TEXT("%d_%s"), __LINE__, *(ErrorMsg->ToText().ToString()));
-			break;
+		// case EMessageSeverity::CriticalError:
+		// 	UE_LOG(LogMMD4UE4_PMXFactory, Error, TEXT("%d_%s"), __LINE__, *(ErrorMsg->ToText().ToString()));
+		// 	break;
 		case EMessageSeverity::Warning:
 			UE_LOG(LogMMD4UE4_PMXFactory, Warning, TEXT("%d_%s"), __LINE__, *(ErrorMsg->ToText().ToString()));
 			break;

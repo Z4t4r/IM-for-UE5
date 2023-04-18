@@ -48,6 +48,9 @@ class UVmdImportUI : public UObject
 	UPROPERTY(EditAnywhere, Category = Mesh, meta = (OBJRestrict = "false"))
 		class USkeletalMesh* SkeletonMesh;
 
+	UPROPERTY(EditAnywhere, Category = Mesh, meta = (OBJRestrict = "false"))
+	class UIKRigDefinition* IKRig;
+
 	/** True to import animations from the FBX File */
 	//UPROPERTY(EditAnywhere, config, Category = Animation, meta = (ImportType = "SkeletalMesh|Animation"))
 		uint32 bImportAnimations : 1;
@@ -106,7 +109,7 @@ class UVmdImportUI : public UObject
 		UDataTable*  MMD2UE4NameTableRow;
 
 	/** mmd extend assset to use for calc ik . */
-	//UPROPERTY(EditAnywhere, Category = Animation, meta = (OBJRestrict = "false"))
+	UPROPERTY(EditAnywhere, Category = Animation, meta = (OBJRestrict = "false"))
 		class UMMDExtendAsset*  MmdExtendAsset;
 
 	//struct FTableRowBase MMD2UE4NameTableRowDmmy;

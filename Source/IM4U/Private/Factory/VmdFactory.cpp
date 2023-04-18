@@ -1306,7 +1306,7 @@ bool UVmdFactory::ImportVMDToAnimSequence(
 		}
 	}
 #endif
-#if 1 /* :UE414: 4.14でAnimationの登録仕様が変わったため、いったん機能制限とする */
+#if 0 /* :UE414: 4.14でAnimationの登録仕様が変わったため、いったん機能制限とする */
 	if(mmdExtend)
 	{
 		FName targetName;
